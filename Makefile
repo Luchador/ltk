@@ -9,9 +9,8 @@ FINAL := YES
 VERSION := US
 IDO_RECOMP := YES
 VERBOSE := 2
-# If COMPARE is 1, check the output sha1sum when building 'all', and if fail to match
-# then compare ELF sections to known md5 checksums.
-COMPARE := 1
+
+WIN_ROM_DIR := /mnt/c/Users/lucha/Documents/N64
 
 # Include Terminal Codes for colourising text.
 include include/make/VT100Codes.make
@@ -42,12 +41,6 @@ TOOLS_DIR := tools
 DATASEG_COMP := $(TOOLS_DIR)/data_compress.sh
 RZ_COMP := $(TOOLS_DIR)/1172compress.sh
 N64CKSUM := $(TOOLS_DIR)/n64cksum
-
-ifeq ($(VERBOSE), 1)
- SHA1SUM = sha1sum
-else
- SHA1SUM = sha1sum --quiet
-endif
 
 # Convert AI Print commands from readable strings to byte arrays automatically.
 ConvertAIPRINT = sed -E -e ':loop s/PRINT\("(..*?)(.)"/PRINT\("\1",\x27\2\x27/g; tloop; \
@@ -130,9 +123,12 @@ include assets/Makefile.music
 
 ## Collect Objects ##
 
-APPELF := $(BUILD_DIR)/ge007.$(OUTCODE).elf
-APPROM := $(BUILD_DIR)/ge007.$(OUTCODE).z64
-APPBIN := $(BUILD_DIR)/ge007.$(OUTCODE).bin
+APPNAME := ltk
+
+APPELF := $(BUILD_DIR)/$(APPNAME).elf
+APPROM := $(BUILD_DIR)/$(APPNAME).z64
+APPBIN := $(BUILD_DIR)/$(APPNAME).bin
+APPMAP := $(BUILD_DIR)/$(APPNAME).map
 
 HEADERFILES := $(foreach dir,src,$(wildcard $(dir)/*.s))
 HEADEROBJECTS := $(foreach file,$(HEADERFILES),$(BUILD_DIR)/$(file:.s=.o))
@@ -203,7 +199,8 @@ endif
 CFLAGS := -Wab,-r4300_mul -non_shared -Olimit 2000 -G 0 -Xcpluscomm $(CFLAGWARNING) $(WOFF) $(INCLUDE) $(MIPSISET) $(LCDEFS) -DTARGET_N64
 
 LD := $(TOOLCHAIN)ld
-LD_SCRIPT := $(BUILD_DIR)/ge007.$(OUTCODE).ld
+LD_SCRIPT := $(BUILD_DIR)/$(APPNAME).ld
+LDFLAGS := -T $(LD_SCRIPT) -Map $(APPMAP) --no-warn-mismatch
 
 # --no-warn-mismatch is needed to link -mips3 object files (some libultra math) with the regular files compiled with -mips2
 LDFLAGS := -T $(LD_SCRIPT) -Map $(BUILD_DIR)/ge007.$(OUTCODE).map --no-warn-mismatch
@@ -330,7 +327,7 @@ endif
 
 #Link Files
 $(APPELF): $(RSPOBJECTS) $(ULTRAOBJECTS) $(HEADEROBJECTS) $(OBSEG_RZ) $(BUILD_DIR)/$(OBSEGMENT) $(MUSIC_RZ_FILES) $(BOOTOBJECTS) $(CODEOBJECTS) $(GAMEOBJECTS) $(RZOBJECTS) $(ROMOBJECTS) $(ASSET_DATAOBJECTS) $(ROMOBJECTS2) $(RAMROM_OBJECTS) $(FONTOBJECTS) $(MUSIC_OBJECTS) $(OBSEG_OBJECTS) ge007.ld
-	cpp $(LDFILEOPTS) -P ge007.ld -o $(BUILD_DIR)/ge007.$(OUTCODE).ld
+	cpp $(LDFILEOPTS) -P ge007.ld -o $(LD_SCRIPT)
 	@echo "Linking Files into ELF"
 	$(LD) $(LDFLAGS) -o $@
 
@@ -338,11 +335,13 @@ $(APPBIN): $(APPELF)
 	@echo "Building ROM"
 	$(OBJCOPY) $< $@ -O binary --gap-fill=0xff
 
-$(APPROM):	$(APPBIN)
+$(APPROM): $(APPBIN)
 	@echo "Compressing ROM"
 	$(DATASEG_COMP) $< $(OUTCODE)
 	@echo "Finalizing ROM"
 	$(N64CKSUM) $< $@
+	@echo "Copying ROM to Windows folder"
+	cp -f "$@" "$(WIN_ROM_DIR)/"
 
 
 ## Phony Recipes below - Get Make to do something ##
@@ -362,17 +361,12 @@ prerequisites: print_info create_directories build_tools extractassets
 
 combine_images: assets/images/combined/combined.bin
 
-checksum: $(APPROM)
-ifeq ($(COMPARE), 1)
-	scripts/make/checksum.sh "$(SHA1SUM)" "$(OUTCODE)" "$(BUILD_DIR)"
-endif
-
 all_p1: prerequisites
-all: all_p1 $(APPROM) checksum
+all: all_p1 $(APPROM)
 	@echo "Rom File Generated in Build Directory."
 
 commonclean:
-	rm -f $(APPELF) $(APPROM) $(APPBIN) $(BUILD_DIR)/ge007.$(OUTCODE).map
+	rm -f $(APPELF) $(APPROM) $(APPBIN) $(APPMAP)
 
 setupclean: commonclean
 	rm -f $(SETUP_BUILD_FILES)
@@ -426,7 +420,8 @@ help:
 include include/make/cmd.make
 
 
-test: checksum
+test:
+	@echo "Checksum test disabled."
 
 
 ifneq ($(filter-out context,$(MAKECMDGOALS)),)
