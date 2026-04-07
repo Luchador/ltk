@@ -112,3 +112,5 @@ assets/obseg/em/data/under.seg
 scripts/local/
 scripts/make/local/
 scripts/__pycache__/generate_prop_model_c.cpython-310.pyc
+assets/**/*.o
+assets/**/*.bin
